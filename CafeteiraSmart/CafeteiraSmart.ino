@@ -1,5 +1,13 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <EEPROM.h>
+
+// SSID e Password para o modo AP
+const char *ssid_ap = "SWS_Module";
+const char *password_ap = "12345678";
+const char *ssid_new;
+const char *pass_new;
+String serverAddress_http = "http://10.0.0.103";
 
 // Update these with values suitable for your network.
 
@@ -151,12 +159,32 @@ void setup() {
   pinMode(D0,OUTPUT);         // WI-FI desconectado
   pinMode(D1,OUTPUT);         // WI-FI Conectado
   pinMode(D2,OUTPUT);         // Cafeteira
+  pinMode(D7, INPUT);         // Botão de reset da memória EEPROM
 
   digitalWrite(D0,LOW);
   digitalWrite(D1,LOW);
   digitalWrite(D2,LOW);
-  
+
   Serial.begin(115200);
+  EEPROM.begin(1024);
+  
+  byte value = EEPROM.read(0);
+  EEPROM.end();
+  if(digitalRead(D7) == LOW){
+    eraseEEPROM();
+    Serial.print("eraseEEPROM");
+  }
+  if(value == 0)
+  {
+    Serial.print("Value = 0");
+    delay(500);
+    //modeAP();
+   }
+   else
+   {
+   ReadEEPROM(ssid_ap, password_ap); 
+   }
+  
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
@@ -168,4 +196,72 @@ void loop() {
     reconnect();
   }
   client.loop();
+}
+
+// --------------- Trabalhando com a memória EEPROM ---------------
+void eraseEEPROM() {
+  EEPROM.begin(1024);
+  for (int i = 0; i < 1024; i++) {
+    EEPROM.write(i, 0);
+  }
+  EEPROM.end();
+}
+
+void WriteEEPROM(String ssid, String password)
+{
+  EEPROM.begin(1024);
+  int ssidlen = ssid.length();
+  int passlen = password.length();
+ 
+  Serial.println("writing eeprom ssid:");
+          for (int i = 0; i < ssidlen; ++i)
+            {
+              EEPROM.write(i, ssid[i]);
+              Serial.print("Wrote: ");
+              Serial.println(ssid[i]); 
+            }
+
+  Serial.println("writing eeprom password:");
+          for (int i = 0; i < passlen; ++i)
+            {
+              EEPROM.write((i+ssidlen), password[i]);
+              Serial.print("Wrote: ");
+              Serial.println(password[i]); 
+            }
+  EEPROM.end();
+}
+
+void ReadEEPROM(String ssid, String password)
+{
+  EEPROM.begin(1024);
+  int ssidlen = ssid.length();
+  int passlen = password.length();
+
+  Serial.println("Reading EEPROM ssid");
+  String esid;
+  for (int i = 0; i < ssidlen; ++i)
+    {
+      esid += char(EEPROM.read(i));
+    }
+    //esid.trim();
+  Serial.println(esid.length());
+  Serial.print("SSID saida: ");
+  Serial.println(esid);
+  
+  Serial.println("\n");
+  
+  Serial.println("Lendo password EEPROM");
+  String passq;
+  for (int i = (ssidlen); i < (ssidlen+passlen); ++i)
+  {
+    passq +=char(EEPROM.read(i));
+  }
+  Serial.println("Tamanho da password: ");
+  Serial.println(passq.length());
+  Serial.println("Password saida: ");
+  Serial.println(passq);
+  
+  ssid_new = esid.c_str();
+  pass_new = passq.c_str();
+  EEPROM.end();
 }
