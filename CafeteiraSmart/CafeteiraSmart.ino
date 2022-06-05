@@ -14,7 +14,6 @@ char msg[50];
 int value = 0;
 
 void setup_wifi() {
-
   delay(10);
   // We start by connecting to a WiFi network
   Serial.println();
@@ -22,14 +21,18 @@ void setup_wifi() {
   Serial.println(ssid);
 
   WiFi.begin(ssid, password);
-
+  
+  digitalWrite(D0, HIGH);
+  digitalWrite(D1, LOW);
+  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
 
   randomSeed(micros());
-
+  digitalWrite(D0, LOW);
+  digitalWrite(D1, HIGH);
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
@@ -37,11 +40,17 @@ void setup_wifi() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
+  char number;
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
   for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+    number = (char)payload[i];
+    Serial.print(number);
+    if(number == '1')
+      digitalWrite(D2, HIGH);
+    else
+      digitalWrite(D2, LOW);
   }
   Serial.println();
 
@@ -139,6 +148,14 @@ void reconnect() {
 
 void setup() {
   pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
+  pinMode(D0,OUTPUT);         // WI-FI desconectado
+  pinMode(D1,OUTPUT);         // WI-FI Conectado
+  pinMode(D2,OUTPUT);         // Cafeteira
+
+  digitalWrite(D0,LOW);
+  digitalWrite(D1,LOW);
+  digitalWrite(D2,LOW);
+  
   Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
