@@ -6,13 +6,14 @@
 // SSID e Password para o modo AP
 const char *ssid_ap = "SmartCafe";
 const char *password_ap = "12345678";
+
+// SSID e Password para o modo Station
 const char *ssid_new;
 const char *pass_new;
 
-// Update these with values suitable for your network.
+String ssid_s, password_s;
 
-const char* ssid = "MS-DOS";
-const char* password = "F80036562945";
+// Endereço do broker MQTT
 const char* mqtt_server = "broker.mqtt-dashboard.com";
 
 WiFiClient espClient;
@@ -25,10 +26,11 @@ int value = 0;
 void WriteEEPROM(String ssid, String password);
 void ReadEEPROM();
 void eraseEEPROM();
+void reconnect();
 
-void setup_wifi(String ssid, String password) {
+void setup_wifi(String ssid, String password, bool eeprom) {
+  
   delay(10);
-  // We start by connecting to a WiFi network
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -42,23 +44,30 @@ void setup_wifi(String ssid, String password) {
     delay(500);
     Serial.print(".");
   }
-
   randomSeed(micros());
-  digitalWrite(D0, LOW);
-  digitalWrite(D1, HIGH);
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-  // Gravando dados na eeprom
-  WriteEEPROM(ssid, password);
-
-  // Iniciando broker MQTT
-  while(true){
-    if (!client.connected()) {
-      reconnect();
+  if(WiFi.status() == WL_CONNECTED){
+    digitalWrite(D0, LOW);
+    digitalWrite(D1, HIGH);
+    digitalWrite(D3,LOW);
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+    
+    // Gravando dados na eeprom
+    if(eeprom)
+      WriteEEPROM(ssid, password);
+      
+    delay(10);
+    client.setServer(mqtt_server, 1883);
+    client.setCallback(callback);
+    // Iniciando broker MQTT
+    while(true){
+      if (!client.connected()) {
+        reconnect();
+      }
+      client.loop();
     }
-    client.loop();
   }
 }
 
@@ -76,13 +85,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
       digitalWrite(D2, LOW);
   }
   Serial.println();
-
-  // Find out how many bottles we should generate lyrics for
+  
   String topicStr(topic);
-  int bottleCount = 0; // assume no bottles unless we correctly parse a value from the topic
+  int bottleCount = 0;                // assume no bottles unless we correctly parse a value from the topic
   if (topicStr.indexOf('/') >= 0) {
     // The topic includes a '/', we'll try to read the number of bottles from just after that
     topicStr.remove(0, topicStr.indexOf('/')+1);
+    
     // Now see if there's a number of bottles after the '/'
     bottleCount = topicStr.toInt();
   }
@@ -145,40 +154,40 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void reconnect() {
-  // Loop until we're reconnected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    // Create a random client ID
+    
     String clientId = "ESP8266Client-";
     clientId += String(random(0xffff), HEX);
-    // Attempt to connect
+    
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
-      // Once connected, publish an announcement...
+     
       client.publish("outTopic", "hello world");
-      // ... and resubscribe
+      
       client.subscribe("greenBottles/#");
       client.subscribe("casaFHMB/L1");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
+     
       delay(5000);
     }
   }
 }
 
 void setup() {
-  //pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
-  pinMode(D0,OUTPUT);               // WI-FI desconectado
-  pinMode(D1,OUTPUT);               // WI-FI Conectado
+  pinMode(D0,OUTPUT);               // WI-FI Station Desconectado
+  pinMode(D1,OUTPUT);               // WI-FI Station Conectado
   pinMode(D2,OUTPUT);               // Cafeteira
+  pinMode(D3,OUTPUT);               // WI-FI Access Point
   pinMode(D7, INPUT);               // Botão de reset da memória EEPROM
 
   digitalWrite(D0,LOW);
   digitalWrite(D1,LOW);
   digitalWrite(D2,LOW);
+  digitalWrite(D3,LOW);
 
   Serial.begin(115200);
   EEPROM.begin(1024);
@@ -188,11 +197,11 @@ void setup() {
   Serial.println("");
   if(digitalRead(D7) == LOW){
     eraseEEPROM();
-    Serial.println("eraseEEPROM");
+    Serial.println("Limpando memória EEPROM");
   }
   if(value == 0)
   {
-    Serial.println("Value = 0");
+    Serial.println("EEPROM Vazia, entrando no modo AP");
     delay(500);
     modeAP();
    }
@@ -200,22 +209,18 @@ void setup() {
    {
    ReadEEPROM(); 
    Serial.println("*********** Tentando Conexao ***********");
-   setup_wifi(String(ssid_new), String(pass_new));
+   Serial.println("------------------------");
+   Serial.print("SSID: ");
+   Serial.println(ssid_s);
+   Serial.print("Password: ");
+   Serial.println(password_s);
+   Serial.println("------------------------");
+   setup_wifi(ssid_s, password_s, false);
    }
-  
-  //setup_wifi();
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
 }
 
 void loop() {
-
   server.handleClient();
-  /*
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop(); */
 }
 
 // ----------------- Criando rede Access Point (AP) para configuração do Wi-Fi do modo station -----------------
@@ -243,8 +248,8 @@ const char MAIN_page[] PROGMEM = R"=====(
 )=====";
 
 void handleRoot() {
- String s = MAIN_page;                                           //lendo HTML
- server.send(200, "text/html", s);                               //enviando HTML para o client
+ String s = MAIN_page;                    //lendo HTML
+ server.send(200, "text/html", s);        //enviando HTML para o client
 }
 
 void handleForm() {
@@ -273,42 +278,17 @@ void handleForm() {
       delay(800);
     }
     WiFi.mode(WIFI_STA);
-    setup_wifi(ssid_new, pass_new);
-    //WiFi.begin(ssid_new, pass_new);
-    //delay(500);
-    
-    /*if ((WiFi.status() == WL_CONNECTED)) 
-    {
-      digitalWrite(D0, LOW);
-      digitalWrite(D1, HIGH);
-      
-      Serial.print("Conectado \n");
-      WriteEEPROM(ssid_new, pass_new);
-      
-      // ---------Iniciando Serviço do MQTT---------
-      while(true){
-        if (!client.connected()) {
-          reconnect();
-        }
-        client.loop();
-      }
-      // -------------------------------------------
-    }
-    else{
-      Serial.print("Não conectado \n");
-      ESP.reset();
-      modeAP();
-    } */
+    setup_wifi(ssid_new, pass_new, true);
 }
 
 void modeAP()
 {
   digitalWrite(D0, HIGH);
   digitalWrite(D1, LOW);
+  digitalWrite(D3,HIGH); 
   delay(1000);
   Serial.println();
-  Serial.print("Configuring access point...");
-  /* You can remove the password parameter if you want the AP to be open. */
+  Serial.print("Configurando access point...");
   
   WiFi.softAP(ssid_ap, password_ap);
 
@@ -318,7 +298,7 @@ void modeAP()
   server.on("/", handleRoot);
   server.on("/action_page", handleForm); //form action is handled here
   server.begin();
-  Serial.println("HTTP server started");
+  Serial.println("Servidor HTTP Iniciado");
 }
 
 // ---------------------------- Trabalhando com a memória EEPROM ----------------------------
@@ -336,19 +316,19 @@ void WriteEEPROM(String ssid, String password)
   int ssidlen = ssid.length();
   int passlen = password.length();
 
-  Serial.println("writing eeprom ssid:");
+  Serial.println("Escrevendo SSID na EEPROM:");
   for (int i = 0; i < ssidlen; ++i)
   {
     EEPROM.write(i, ssid[i]);
-    Serial.print("Wrote: ");
+    Serial.print("Escrito: ");
     Serial.println(ssid[i]); 
   }
   EEPROM.write(ssidlen, '|');
-  Serial.println("writing eeprom password:");
+  Serial.println("Escrevendo Password na EEPROM:");
   for (int i = 0; i < passlen; ++i)
   {
     EEPROM.write((i+ssidlen+1), password[i]);
-    Serial.print("Wrote: ");
+    Serial.print("Escrito: ");
     Serial.println(password[i]); 
   }
   EEPROM.end();
@@ -372,35 +352,7 @@ void ReadEEPROM()
         passq +=char(EEPROM.read(i));
    }
   }
-  
-  //int ssidlen = ssid.length();
-  //int passlen = password.length();
-
-  //Serial.println("Reading EEPROM ssid");
-  //String esid;
-  /*for (int i = 0; i < ssidlen; ++i)
-    {
-      esid += char(EEPROM.read(i));
-    }*/
-    //esid.trim();
-  //Serial.println(esid.length());
-  Serial.print("SSID saida: ");
-  Serial.println(esid);
-  
-  Serial.println("\n");
-  
-  //Serial.println("Lendo password EEPROM");
-  //String passq;
-  /*for (int i = (ssidlen); i < (ssidlen+passlen); ++i)
-  {
-    passq +=char(EEPROM.read(i));
-  }
-  Serial.println("Tamanho da password: ");
-  Serial.println(passq.length());*/
-  Serial.print("Password saida: ");
-  Serial.println(passq);
-  
-  ssid_new = esid.c_str();
-  pass_new = passq.c_str();
+  ssid_s = esid.c_str();
+  password_s = passq.c_str();
   EEPROM.end();
 }
