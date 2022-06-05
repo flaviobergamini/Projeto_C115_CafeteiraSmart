@@ -22,6 +22,10 @@ long lastMsg = 0;
 char msg[50];
 int value = 0;
 
+void WriteEEPROM(String ssid, String password);
+void ReadEEPROM();
+void eraseEEPROM();
+
 void setup_wifi(String ssid, String password) {
   delay(10);
   // We start by connecting to a WiFi network
@@ -194,8 +198,9 @@ void setup() {
    }
    else
    {
-   ReadEEPROM(ssid_ap, password_ap); 
-   handleForm();
+   ReadEEPROM(); 
+   Serial.println("*********** Tentando Conexao ***********");
+   setup_wifi(String(ssid_new), String(pass_new));
    }
   
   //setup_wifi();
@@ -243,57 +248,57 @@ void handleRoot() {
 }
 
 void handleForm() {
-  digitalWrite(D0, HIGH);
-  digitalWrite(D1, LOW);
- String ssid_Station = server.arg("SSID"); 
- String pass_Station = server.arg("Password"); 
- 
- ssid_new = ssid_Station.c_str();
- pass_new = pass_Station.c_str();
- 
- Serial.print("SSID: ");
- Serial.println(ssid_Station);
- 
- Serial.print("Password: ");
- Serial.println(pass_Station);
- Serial.print("------------- \n");
- Serial.println(ssid_new);
- 
- String s = "<a href='/'> Go Back </a>";
- server.send(200, "text/html", s); // Enviando página Web
- 
- for (uint8_t t = 4; t > 0; t--) {
-    Serial.printf("[SETUP] WAIT %d...\n", t);
-    Serial.flush();
-    delay(800);
-  }
-  WiFi.mode(WIFI_STA);
-  setup_wifi(ssid_new, pass_new);
-  //WiFi.begin(ssid_new, pass_new);
-  //delay(500);
-  
-  /*if ((WiFi.status() == WL_CONNECTED)) 
-  {
-    digitalWrite(D0, LOW);
-    digitalWrite(D1, HIGH);
-    
-    Serial.print("Conectado \n");
-    WriteEEPROM(ssid_new, pass_new);
-    
-    // ---------Iniciando Serviço do MQTT---------
-    while(true){
-      if (!client.connected()) {
-        reconnect();
-      }
-      client.loop();
+   digitalWrite(D0, HIGH);
+   digitalWrite(D1, LOW);
+   String ssid_Station = server.arg("SSID"); 
+   String pass_Station = server.arg("Password"); 
+   
+   ssid_new = ssid_Station.c_str();
+   pass_new = pass_Station.c_str();
+   
+   Serial.print("SSID: ");
+   Serial.println(ssid_Station);
+   
+   Serial.print("Password: ");
+   Serial.println(pass_Station);
+   Serial.print("------------- \n");
+   Serial.println(ssid_new);
+   
+   String s = "<a href='/'> Go Back </a>";
+   server.send(200, "text/html", s); // Enviando página Web
+   
+   for (uint8_t t = 4; t > 0; t--) {
+      Serial.printf("[SETUP] WAIT %d...\n", t);
+      Serial.flush();
+      delay(800);
     }
-    // -------------------------------------------
-  }
-  else{
-    Serial.print("Não conectado \n");
-    ESP.reset();
-    modeAP();
-  } */
+    WiFi.mode(WIFI_STA);
+    setup_wifi(ssid_new, pass_new);
+    //WiFi.begin(ssid_new, pass_new);
+    //delay(500);
+    
+    /*if ((WiFi.status() == WL_CONNECTED)) 
+    {
+      digitalWrite(D0, LOW);
+      digitalWrite(D1, HIGH);
+      
+      Serial.print("Conectado \n");
+      WriteEEPROM(ssid_new, pass_new);
+      
+      // ---------Iniciando Serviço do MQTT---------
+      while(true){
+        if (!client.connected()) {
+          reconnect();
+        }
+        client.loop();
+      }
+      // -------------------------------------------
+    }
+    else{
+      Serial.print("Não conectado \n");
+      ESP.reset();
+      modeAP();
+    } */
 }
 
 void modeAP()
@@ -330,53 +335,69 @@ void WriteEEPROM(String ssid, String password)
   EEPROM.begin(1024);
   int ssidlen = ssid.length();
   int passlen = password.length();
- 
-  Serial.println("writing eeprom ssid:");
-          for (int i = 0; i < ssidlen; ++i)
-            {
-              EEPROM.write(i, ssid[i]);
-              Serial.print("Wrote: ");
-              Serial.println(ssid[i]); 
-            }
 
+  Serial.println("writing eeprom ssid:");
+  for (int i = 0; i < ssidlen; ++i)
+  {
+    EEPROM.write(i, ssid[i]);
+    Serial.print("Wrote: ");
+    Serial.println(ssid[i]); 
+  }
+  EEPROM.write(ssidlen, '|');
   Serial.println("writing eeprom password:");
-          for (int i = 0; i < passlen; ++i)
-            {
-              EEPROM.write((i+ssidlen), password[i]);
-              Serial.print("Wrote: ");
-              Serial.println(password[i]); 
-            }
+  for (int i = 0; i < passlen; ++i)
+  {
+    EEPROM.write((i+ssidlen+1), password[i]);
+    Serial.print("Wrote: ");
+    Serial.println(password[i]); 
+  }
   EEPROM.end();
 }
 
-void ReadEEPROM(String ssid, String password)
+void ReadEEPROM()
 {
   EEPROM.begin(1024);
-  int ssidlen = ssid.length();
-  int passlen = password.length();
+  Serial.println("Lendo EEPROM ssid");
+  
+  bool ssidBool = false;
+  String esid = "";
+  String passq = "";
+  for(int i = 0; i < EEPROM.length(); i++){
+    if(char(EEPROM.read(i)) == '|')
+      ssidBool = true;
+    if(char(EEPROM.read(i)) != '|' and ssidBool == false){
+        esid += char(EEPROM.read(i));
+    }
+    else if(char(EEPROM.read(i)) != '|' and ssidBool == true){
+        passq +=char(EEPROM.read(i));
+   }
+  }
+  
+  //int ssidlen = ssid.length();
+  //int passlen = password.length();
 
-  Serial.println("Reading EEPROM ssid");
-  String esid;
-  for (int i = 0; i < ssidlen; ++i)
+  //Serial.println("Reading EEPROM ssid");
+  //String esid;
+  /*for (int i = 0; i < ssidlen; ++i)
     {
       esid += char(EEPROM.read(i));
-    }
+    }*/
     //esid.trim();
-  Serial.println(esid.length());
+  //Serial.println(esid.length());
   Serial.print("SSID saida: ");
   Serial.println(esid);
   
   Serial.println("\n");
   
-  Serial.println("Lendo password EEPROM");
-  String passq;
-  for (int i = (ssidlen); i < (ssidlen+passlen); ++i)
+  //Serial.println("Lendo password EEPROM");
+  //String passq;
+  /*for (int i = (ssidlen); i < (ssidlen+passlen); ++i)
   {
     passq +=char(EEPROM.read(i));
   }
   Serial.println("Tamanho da password: ");
-  Serial.println(passq.length());
-  Serial.println("Password saida: ");
+  Serial.println(passq.length());*/
+  Serial.print("Password saida: ");
   Serial.println(passq);
   
   ssid_new = esid.c_str();
