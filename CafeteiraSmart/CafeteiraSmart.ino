@@ -1,13 +1,13 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <ESP8266WebServer.h>
 #include <EEPROM.h>
 
 // SSID e Password para o modo AP
-const char *ssid_ap = "SWS_Module";
+const char *ssid_ap = "SmartCafe";
 const char *password_ap = "12345678";
 const char *ssid_new;
 const char *pass_new;
-String serverAddress_http = "http://10.0.0.103";
 
 // Update these with values suitable for your network.
 
@@ -16,12 +16,13 @@ const char* password = "F80036562945";
 const char* mqtt_server = "broker.mqtt-dashboard.com";
 
 WiFiClient espClient;
+ESP8266WebServer server(80);
 PubSubClient client(espClient);
 long lastMsg = 0;
 char msg[50];
 int value = 0;
 
-void setup_wifi() {
+void setup_wifi(String ssid, String password) {
   delay(10);
   // We start by connecting to a WiFi network
   Serial.println();
@@ -45,6 +46,16 @@ void setup_wifi() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+  // Gravando dados na eeprom
+  WriteEEPROM(ssid, password);
+
+  // Iniciando broker MQTT
+  while(true){
+    if (!client.connected()) {
+      reconnect();
+    }
+    client.loop();
+  }
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -155,11 +166,11 @@ void reconnect() {
 }
 
 void setup() {
-  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
-  pinMode(D0,OUTPUT);         // WI-FI desconectado
-  pinMode(D1,OUTPUT);         // WI-FI Conectado
-  pinMode(D2,OUTPUT);         // Cafeteira
-  pinMode(D7, INPUT);         // Botão de reset da memória EEPROM
+  //pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
+  pinMode(D0,OUTPUT);               // WI-FI desconectado
+  pinMode(D1,OUTPUT);               // WI-FI Conectado
+  pinMode(D2,OUTPUT);               // Cafeteira
+  pinMode(D7, INPUT);               // Botão de reset da memória EEPROM
 
   digitalWrite(D0,LOW);
   digitalWrite(D1,LOW);
@@ -170,35 +181,142 @@ void setup() {
   
   byte value = EEPROM.read(0);
   EEPROM.end();
+  Serial.println("");
   if(digitalRead(D7) == LOW){
     eraseEEPROM();
-    Serial.print("eraseEEPROM");
+    Serial.println("eraseEEPROM");
   }
   if(value == 0)
   {
-    Serial.print("Value = 0");
+    Serial.println("Value = 0");
     delay(500);
-    //modeAP();
+    modeAP();
    }
    else
    {
    ReadEEPROM(ssid_ap, password_ap); 
+   handleForm();
    }
   
-  setup_wifi();
+  //setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 }
 
 void loop() {
 
+  server.handleClient();
+  /*
   if (!client.connected()) {
     reconnect();
   }
-  client.loop();
+  client.loop(); */
 }
 
-// --------------- Trabalhando com a memória EEPROM ---------------
+// ----------------- Criando rede Access Point (AP) para configuração do Wi-Fi do modo station -----------------
+
+const char MAIN_page[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html>
+<body>
+ 
+<h2>Cafeteira Smart<h2>
+<h3> C115 - 2021</h3>
+ 
+<form action="/action_page">
+  SSID:<br>
+  <input type="text" name="SSID" value="">
+  <br>
+  Password:<br>
+  <input type="password" name="Password" value="">
+  <br><br>
+  <input type="submit" value="Submit">
+</form> 
+ 
+</body>
+</html>
+)=====";
+
+void handleRoot() {
+ String s = MAIN_page;                                           //lendo HTML
+ server.send(200, "text/html", s);                               //enviando HTML para o client
+}
+
+void handleForm() {
+  digitalWrite(D0, HIGH);
+  digitalWrite(D1, LOW);
+ String ssid_Station = server.arg("SSID"); 
+ String pass_Station = server.arg("Password"); 
+ 
+ ssid_new = ssid_Station.c_str();
+ pass_new = pass_Station.c_str();
+ 
+ Serial.print("SSID: ");
+ Serial.println(ssid_Station);
+ 
+ Serial.print("Password: ");
+ Serial.println(pass_Station);
+ Serial.print("------------- \n");
+ Serial.println(ssid_new);
+ 
+ String s = "<a href='/'> Go Back </a>";
+ server.send(200, "text/html", s); // Enviando página Web
+ 
+ for (uint8_t t = 4; t > 0; t--) {
+    Serial.printf("[SETUP] WAIT %d...\n", t);
+    Serial.flush();
+    delay(800);
+  }
+  WiFi.mode(WIFI_STA);
+  setup_wifi(ssid_new, pass_new);
+  //WiFi.begin(ssid_new, pass_new);
+  //delay(500);
+  
+  /*if ((WiFi.status() == WL_CONNECTED)) 
+  {
+    digitalWrite(D0, LOW);
+    digitalWrite(D1, HIGH);
+    
+    Serial.print("Conectado \n");
+    WriteEEPROM(ssid_new, pass_new);
+    
+    // ---------Iniciando Serviço do MQTT---------
+    while(true){
+      if (!client.connected()) {
+        reconnect();
+      }
+      client.loop();
+    }
+    // -------------------------------------------
+  }
+  else{
+    Serial.print("Não conectado \n");
+    ESP.reset();
+    modeAP();
+  } */
+}
+
+void modeAP()
+{
+  digitalWrite(D0, HIGH);
+  digitalWrite(D1, LOW);
+  delay(1000);
+  Serial.println();
+  Serial.print("Configuring access point...");
+  /* You can remove the password parameter if you want the AP to be open. */
+  
+  WiFi.softAP(ssid_ap, password_ap);
+
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(myIP);
+  server.on("/", handleRoot);
+  server.on("/action_page", handleForm); //form action is handled here
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+// ---------------------------- Trabalhando com a memória EEPROM ----------------------------
 void eraseEEPROM() {
   EEPROM.begin(1024);
   for (int i = 0; i < 1024; i++) {
