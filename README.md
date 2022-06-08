@@ -3,9 +3,9 @@
 <h1 align="center">Tomada Inteligente com MQTT e NodeMCU</h1>
 
 <p align="center">
-    <img src="https://portogente.com.br/images/2021/iot-uma-explicacao-simples-img0.jpg">
+    <img src="https://www.diariodeti.com.br/wp-content/uploads/2017/10/IoT-06-948x640.png">
 </p>
-Imagem retirada do site Mira Flores: https://portogente.com.br
+Imagem retirada do site Mira Flores: https://www.diariodeti.com.br
 
 ### :books: Descrição
 
