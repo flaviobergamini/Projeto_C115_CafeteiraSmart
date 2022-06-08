@@ -4,7 +4,7 @@
 #include <EEPROM.h>
 
 // SSID e Password para o modo AP
-const char *ssid_ap = "SmartCafe";
+const char *ssid_ap = "Tomada Inteligente";
 const char *password_ap = "12345678";
 
 // SSID e Password para o modo Station
@@ -166,7 +166,7 @@ void reconnect() {
       client.publish("outTopic", "hello world");
       
       client.subscribe("greenBottles/#");
-      client.subscribe("casaFHMB/L1");
+      client.subscribe("tomadaBFL/T1");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -180,7 +180,7 @@ void reconnect() {
 void setup() {
   pinMode(D0,OUTPUT);               // WI-FI Station Desconectado
   pinMode(D1,OUTPUT);               // WI-FI Station Conectado
-  pinMode(D2,OUTPUT);               // Cafeteira
+  pinMode(D2,OUTPUT);               // Tomada
   pinMode(D3,OUTPUT);               // WI-FI Access Point
   pinMode(D7, INPUT);               // Botão de reset da memória EEPROM
 
@@ -230,8 +230,8 @@ const char MAIN_page[] PROGMEM = R"=====(
 <html>
 <body>
  
-<h2>Cafeteira Smart<h2>
-<h3> C115 - 2021</h3>
+<h2>Tomada Inteligente<h2>
+<h3> C115 - 2022</h3>
  
 <form action="/action_page">
   SSID:<br>
